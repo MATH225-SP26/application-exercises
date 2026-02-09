@@ -1,0 +1,727 @@
+---
+title: "AE 08 - The Office - Predicting IMDB Ratings"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+    keep_tex: false
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+In this application exercise, you'll build a predictive model for IMDB ratings of episodes of *The Office* using the **tidymodels** framework. You'll practice feature engineering, creating modeling workflows, and evaluating model performance.
+
+**In this application exercise, you will:**
+
+- Engineer features from text data (episode scripts)
+- Create indicator variables for special episodes
+- Build a modeling dataset
+- Split data into training and testing sets
+- Specify and fit linear regression models
+- Create preprocessing recipes
+- Build modeling workflows
+- Perform cross-validation
+- Compare model performance
+
+**Estimated time:** 60-90 minutes
+
+---
+
+## Getting Started
+
+### Fork and Clone Workflow
+
+**Quick reminder:** Work in YOUR forked `application-exercises` repository.
+
+1. Navigate to the `ae-08-office` folder in YOUR fork
+2. Open `ae-08-office.Rmd`
+3. Update the YAML with your name
+4. Knit to verify it works
+
+---
+
+## Packages
+```{r load-packages, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(schrute)     # Contains The Office data
+library(lubridate)   # For working with dates
+```
+
+**What these packages do:**
+
+- **tidyverse:** Data wrangling and visualization
+- **tidymodels:** Modeling framework (replaces caret)
+- **schrute:** Contains transcripts from The Office
+- **lubridate:** Working with dates
+
+---
+
+## The Data
+
+Use `theoffice` data from the [**schrute**](https://bradlindblad.github.io/schrute/) package to predict IMDB scores for episodes of The Office.
+```{r explore-data}
+glimpse(theoffice)
+```
+
+**Understanding the data:**
+
+- Each row is a line of dialogue
+- Multiple rows per episode (one per line)
+- Variables include: season, episode, character, text, imdb_rating, total_votes, air_date
+
+**Fix `air_date` for later use:**
+```{r fix-air-date}
+theoffice <- theoffice %>%
+  mutate(air_date = ymd(as.character(air_date)))
+```
+
+**What this does:**
+
+- Converts `air_date` to proper Date format
+- `ymd()`: Parses "year-month-day" format
+
+---
+
+## Our Goal
+
+We will:
+
+- Engineer features based on episode scripts
+- Train a model
+- Perform cross validation
+- Make predictions
+
+**Note:** The episodes listed in `theoffice` don't match the ones listed in the data we used in the cross validation lesson.
+```{r check-episodes}
+theoffice %>%
+  distinct(season, episode)
+```
+
+---
+
+## Exercise 1: Calculate Line Percentages
+
+Calculate the percentage of lines spoken by Jim, Pam, Michael, and Dwight for each episode of The Office.
+
+**Why?** These are main characters, and the amount they speak might relate to episode ratings.
+
+**Task 1.1:** Create a dataset with line percentages.
+```{r lines, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_lines <- theoffice %>%
+  # Group by season and episode
+  group_by(___, ___) %>%
+  # Calculate total lines per episode and lines by main characters
+  summarise(
+    total_lines = n(),
+    jim_lines = sum(character == "___"),
+    pam_lines = sum(character == "___"),
+    michael_lines = sum(character == "___"),
+    dwight_lines = sum(character == "___")
+  ) %>%
+  # Calculate percentages
+  mutate(
+    jim_pct = ___ / total_lines,
+    pam_pct = ___ / total_lines,
+    michael_pct = ___ / total_lines,
+    dwight_pct = ___ / total_lines
+  )
+
+office_lines
+```
+
+**Hints:**
+
+- Group by `season` and `episode`
+- Character names: "Jim", "Pam", "Michael", "Dwight"
+- `sum(character == "Jim")` counts lines spoken by Jim
+- `n()` gives total number of rows (lines) in each group
+
+**Task 1.2:** Which episode has the highest percentage of Michael lines?
+```{r highest-michael, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_lines %>%
+  arrange(desc(___)) %>%
+  select(season, episode, ___)
+```
+
+**Your answer:** Season ___, Episode ___
+
+---
+
+## Exercise 2: Identify Special Episodes
+
+Identify episodes that touch on Halloween, Valentine's Day, and Christmas.
+
+**Why?** Special holiday episodes might have different ratings patterns.
+
+**Task 2.1:** Search episode text for holiday keywords.
+```{r special-episodes, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_episodes <- theoffice %>%
+  group_by(season, episode) %>%
+  summarise(
+    # Check if text contains holiday keywords (case-insensitive)
+    halloween = sum(str_detect(str_to_lower(text), "___")) > 0,
+    valentine = sum(str_detect(str_to_lower(text), "___")) > 0,
+    christmas = sum(str_detect(str_to_lower(text), "___")) > 0
+  ) %>%
+  # Convert TRUE/FALSE to 1/0
+  mutate(
+    halloween = as.numeric(___),
+    valentine = as.numeric(___),
+    christmas = as.numeric(___)
+  )
+
+office_episodes
+```
+
+**Hints:**
+
+- Search for keywords: "halloween", "valentine", "christmas"
+- `str_detect()`: Returns TRUE if pattern found
+- `str_to_lower()`: Converts text to lowercase
+- `sum(...) > 0`: TRUE if found at least once
+- `as.numeric(TRUE)` = 1, `as.numeric(FALSE)` = 0
+
+**Task 2.2:** How many episodes mention each holiday?
+```{r count-holidays, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_episodes %>%
+  summarise(
+    halloween_episodes = sum(___),
+    valentine_episodes = sum(___),
+    christmas_episodes = sum(___)
+  )
+```
+
+**Your answers:**
+
+Halloween episodes: _____
+Valentine episodes: _____
+Christmas episodes: _____
+
+---
+
+## Exercise 3: Create Modeling Dataset
+
+Put together a modeling dataset that includes features you've engineered. Also add an indicator variable called `michael` which takes the value `1` if Michael Scott (Steve Carrell) was there, and `0` if not.
+
+**Note:** Michael Scott left the show at the end of Season 7.
+
+**Task 3.1:** Get one row per episode with all features.
+```{r office-df, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+# First, get the basic episode info (one row per episode)
+office_info <- theoffice %>%
+  group_by(season, episode) %>%
+  summarise(
+    episode_name = first(episode_name),
+    imdb_rating = first(imdb_rating),
+    total_votes = first(total_votes),
+    air_date = first(air_date)
+  )
+
+# Join everything together
+office_df <- office_info %>%
+  # Join with line percentages
+  left_join(___, by = c("___", "___")) %>%
+  # Join with holiday indicators
+  left_join(___, by = c("___", "___")) %>%
+  # Add Michael indicator (1 if season <= 7, 0 otherwise)
+  mutate(michael = if_else(___ <= ___, 1, 0))
+
+office_df
+```
+
+**Hints:**
+
+- Join with `office_lines`
+- Join with `office_episodes`
+- Join by `"season"` and `"episode"`
+- Michael left after season 7: `season <= 7`
+
+**Task 3.2:** Verify the dataset.
+```{r verify-office-df, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+# Check dimensions
+dim(office_df)
+
+# Check for missing values
+office_df %>%
+  summarise(across(everything(), ~sum(is.na(.))))
+
+# Check Michael variable
+office_df %>%
+  count(season, michael)
+```
+
+**How many episodes are in the dataset?** _____
+
+**Do seasons 1-7 have michael = 1?** _____
+
+---
+
+## Exercise 4: Split the Data
+
+Split the data into training (75%) and testing (25%).
+```{r split, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+set.seed(1122)
+
+office_split <- initial_split(___, prop = ___)
+office_train <- training(___)
+office_test <- testing(___)
+
+# Check the split
+nrow(office_train)
+nrow(office_test)
+```
+
+**Hints:**
+
+- `initial_split(office_df, prop = 0.75)`
+- `training(office_split)`
+- `testing(office_split)`
+
+**Training set size:** _____ episodes
+
+**Testing set size:** _____ episodes
+
+---
+
+## Exercise 5: Specify a Model
+
+Specify a linear regression model.
+```{r model, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_mod <- linear_reg() %>%
+  set_engine("___")
+```
+
+**Hint:** Use `"lm"` as the engine for linear regression.
+
+---
+
+## Exercise 6: Create a Recipe
+
+Create a recipe that:
+
+- Updates the role of `episode_name` to not be a predictor
+- Removes `air_date` as a predictor  
+- Uses `season` as a factor
+- Removes all zero variance predictors
+```{r recipe, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_rec <- recipe(imdb_rating ~ ., data = ___) %>%
+  # Update role of episode_name (keep it but don't use as predictor)
+  update_role(___, new_role = "___") %>%
+  # Remove air_date
+  step_rm(___) %>%
+  # Convert season to factor
+  step_mutate(season = as.factor(___)) %>%
+  # Remove zero variance predictors
+  step_zv(___)
+
+# View the recipe
+office_rec
+```
+
+**Hints:**
+
+- Formula: `imdb_rating ~ .` (predict rating with all variables)
+- Data: `office_train`
+- Update role of `episode_name` to `"ID"`
+- Remove `air_date`
+- Convert `season` to factor
+- Remove zero variance from `all_predictors()`
+
+---
+
+## Exercise 7: Build a Workflow
+
+Build a workflow for fitting the model specified earlier and using the recipe you developed to preprocess the data.
+```{r workflow, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_wflow <- workflow() %>%
+  add_model(___) %>%
+  add_recipe(___)
+
+office_wflow
+```
+
+**Hints:**
+
+- Add the model: `office_mod`
+- Add the recipe: `office_rec`
+
+---
+
+## Exercise 8: Fit the Model
+
+Fit the model to training data and interpret a couple of the slope coefficients.
+```{r fit, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+office_fit <- office_wflow %>%
+  fit(data = ___)
+
+# View the coefficients
+tidy(___)
+```
+
+**Hint:** Fit to `office_train`
+
+**Task 8.1:** What is the coefficient for `michael`?
+
+**Your answer:** _____
+
+**Interpretation:**
+
+Episodes with Michael Scott have an IMDB rating that is _____ points _________ (higher/lower) than episodes without him, on average, holding all else constant.
+
+**Task 8.2:** What is the coefficient for `jim_pct`?
+
+**Your answer:** _____
+
+**Interpretation:**
+
+For every 1 unit increase in the proportion of lines spoken by Jim, the IMDB rating _________ by _____ points, on average, holding all else constant.
+
+---
+
+## Exercise 9: Cross-Validation
+
+Perform 5-fold cross validation and view model performance metrics.
+```{r cv, message=FALSE, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+# Create folds
+set.seed(345)
+folds <- vfold_cv(___, v = ___)
+folds
+
+# Fit resamples
+set.seed(456)
+office_fit_rs <- ___ %>%
+  fit_resamples(___)
+
+# Collect metrics
+collect_metrics(___)
+```
+
+**Hints:**
+
+- Create folds from `office_train`
+- Use `v = 5` for 5-fold CV
+- Fit `office_wflow` to `folds`
+- Collect metrics from `office_fit_rs`
+
+**Task 9.1:** What is the mean RMSE from cross-validation?
+
+**Your answer:** _____
+
+**Task 9.2:** What is the mean R-squared from cross-validation?
+
+**Your answer:** _____
+
+**Task 9.3:** What do these metrics tell you about model performance?
+
+**Your answer:**
+
+___________________________________________________________________________
+___________________________________________________________________________
+
+---
+
+## Exercise 10: Compare Models
+
+Use your model to make predictions for the testing data and calculate the RMSE. Also use the model developed in the cross validation lesson to make predictions for the testing data and calculate the RMSE as well. Which model did a better job in predicting IMDB scores for the testing data?
+
+### New Model
+```{r new-model, message=FALSE, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+# Make predictions on test data
+office_pred <- predict(___, ___) %>%
+  bind_cols(___)
+
+# Calculate RMSE
+office_pred %>%
+  rmse(truth = ___, estimate = ___)
+```
+
+**Hints:**
+
+- Predict using `office_fit` on `office_test`
+- Bind predictions to `office_test`
+- RMSE: truth = `imdb_rating`, estimate = `.pred`
+
+**New model RMSE:** _____
+
+### Old Model
+```{r old-model, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+# Specify old model
+office_mod_old <- linear_reg() %>%
+  set_engine("lm")
+
+# Create old recipe (simpler features)
+office_rec_old <- recipe(imdb_rating ~ season + episode + total_votes + air_date, 
+                         data = office_train) %>%
+  # Extract month of air_date
+  step_date(air_date, features = "month") %>%
+  step_rm(air_date) %>%
+  # Make dummy variables of month 
+  step_dummy(contains("month")) %>%
+  # Remove zero variance predictors
+  step_zv(all_predictors())
+
+# Create old workflow
+office_wflow_old <- workflow() %>%
+  add_model(___) %>%
+  add_recipe(___)
+
+# Fit old model
+office_fit_old <- office_wflow_old %>%
+  fit(data = ___)
+
+# View coefficients
+tidy(office_fit_old)
+
+# Make predictions with old model
+office_pred_old <- predict(___, ___) %>%
+  bind_cols(___)
+
+# Calculate RMSE for old model
+office_pred_old %>%
+  rmse(truth = ___, estimate = ___)
+```
+
+**Old model RMSE:** _____
+
+**Task 10.1:** Which model has better performance on the test set?
+
+**Your answer:**
+
+The ___________ model has better performance because _____________________
+___________________________________________________________________________
+
+**Task 10.2:** Why do you think one model performed better than the other?
+
+**Your answer:**
+
+___________________________________________________________________________
+___________________________________________________________________________
+___________________________________________________________________________
+
+---
+
+## Exercise 11: Challenge (Optional)
+
+**Task 11.1:** Create a visualization comparing predicted vs. actual ratings for the test set.
+```{r viz-predictions, eval=FALSE}
+# Your code here
+office_pred %>%
+  ggplot(aes(x = ___, y = ___)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(
+    title = "Predicted vs. Actual IMDB Ratings",
+    x = "Actual Rating",
+    y = "Predicted Rating"
+  )
+```
+
+**Task 11.2:** Which episodes did the model predict least accurately?
+```{r worst-predictions, eval=FALSE}
+office_pred %>%
+  mutate(error = abs(imdb_rating - .pred)) %>%
+  arrange(desc(error)) %>%
+  select(season, episode, episode_name, imdb_rating, .pred, error)
+```
+
+---
+
+## Reflection
+
+**What was the most challenging part of building this model?**
+
+___________________________________________________________________________
+___________________________________________________________________________
+
+**What did you learn about feature engineering?**
+
+___________________________________________________________________________
+___________________________________________________________________________
+
+**If you could add one more feature to improve the model, what would it be?**
+
+___________________________________________________________________________
+
+---
+
+## Knit and Submit
+
+**Before you finish:**
+
+1. ✅ Make sure all code chunks run without errors
+2. ✅ Change all `eval=FALSE` to `eval=TRUE`
+3. ✅ Fill in all answer spaces
+4. ✅ Knit to HTML first to verify
+
+**Git workflow:**
+
+1. Click the **Git** pane
+2. Check boxes next to all changed files
+3. Click **Commit**
+4. Write message: "Completed AE 08 - The Office"
+5. Click **Commit** then **Push**
+
+---
+
+## Generate PDF for Canvas
+
+1. Click **Knit** dropdown arrow
+2. Select **Knit to PDF**
+3. Find `ae-08-office.pdf` in Files pane
+4. Export and save to your computer
+5. Submit to Canvas
+
+---
+
+## Troubleshooting
+
+**Common issues:**
+
+- **Error: "object not found":** Make sure you created the object in a previous chunk
+- **Error: "could not find function":** Make sure you loaded all packages
+- **Join errors:** Check that you're joining by the correct column names
+- **Cross-validation taking a long time:** This is normal - CV fits multiple models
+
+**Data wrangling issues:**
+
+- **Line counts seem wrong:** Make sure you grouped by season AND episode
+- **Missing values:** Use `na.rm = TRUE` in summary functions
+- **Holiday indicators not working:** Make sure you converted to lowercase with `str_to_lower()`
+
+**Modeling issues:**
+
+- **Recipe errors:** Make sure you're using `office_train` in the recipe
+- **Workflow errors:** Make sure you added both model and recipe
+- **Prediction errors:** Make sure you're predicting on `office_test`
+
+**Cross-validation:**
+
+- **Folds not created:** Make sure you used `office_train`
+- **fit_resamples error:** Make sure you're fitting the workflow, not the fit
+
+**If you're stuck:**
+
+- Review the walkthrough video
+- Check tidymodels documentation: `?recipe`, `?workflow`, `?vfold_cv`
+- Make sure you completed all previous exercises
+- Ask on the discussion board
+
+---
+
+## Key Concepts Review
+
+**Feature engineering:**
+
+- Creating new variables from existing data
+- Aggregating text data (counting lines, detecting keywords)
+- Creating indicator variables
+
+**Tidymodels workflow:**
+
+1. Split data (training/testing)
+2. Specify model
+3. Create recipe (preprocessing)
+4. Build workflow (model + recipe)
+5. Fit model
+6. Make predictions
+7. Evaluate performance
+
+**Model evaluation:**
+
+- **RMSE:** Root Mean Squared Error (lower is better)
+- **R²:** Proportion of variance explained (higher is better)
+- **Cross-validation:** More reliable than single train/test split
+
+**Why cross-validation?**
+
+- Uses all data for training and testing
+- Provides multiple estimates of performance
+- Reduces dependence on single train/test split
+- More reliable estimate of how model will perform on new data
+
+---
+
+## Quick Reference
+
+**Feature engineering:**
+```r
+# Count by group
+data %>%
+  group_by(group_var) %>%
+  summarise(count = n())
+
+# Detect patterns
+sum(str_detect(text, "pattern"))
+
+# Create indicators
+mutate(indicator = if_else(condition, 1, 0))
+```
+
+**Tidymodels workflow:**
+```r
+# Split
+split <- initial_split(data, prop = 0.75)
+train <- training(split)
+test <- testing(split)
+
+# Model
+mod <- linear_reg() %>% set_engine("lm")
+
+# Recipe
+rec <- recipe(y ~ ., data = train) %>%
+  step_*()
+
+# Workflow
+wflow <- workflow() %>%
+  add_model(mod) %>%
+  add_recipe(rec)
+
+# Fit
+fit <- wflow %>% fit(data = train)
+
+# Predict
+predictions <- predict(fit, test)
+
+# Cross-validation
+folds <- vfold_cv(train, v = 5)
+fit_rs <- wflow %>% fit_resamples(folds)
+collect_metrics(fit_rs)
+```

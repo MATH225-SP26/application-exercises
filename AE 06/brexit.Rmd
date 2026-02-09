@@ -1,0 +1,517 @@
+---
+title: "AE 06 - Brexit - Telling Different Stories with Data"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+    keep_tex: false
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+In this application exercise, you'll explore how the same data can tell different stories depending on how you visualize it. You'll work with survey data about Brexit opinions across different regions of Great Britain.
+
+**The key lesson:** The choices you make in creating visualizations (scales, proportions vs. counts, faceting vs. grouping) dramatically affect the story your visualization tells.
+
+**In this application exercise, you will:**
+
+- Work with factors using `fct_relevel()` and `fct_recode()`
+- Create faceted visualizations
+- Use free scales in faceting
+- Calculate and visualize proportions
+- Create grouped bar plots with `position = "dodge"`
+- Format axis labels with the scales package
+- Interpret how different visualizations tell different stories
+
+**Estimated time:** 30-45 minutes
+
+---
+
+## Getting Started
+
+### Fork and Clone Workflow
+
+**Quick reminder:** Work in YOUR forked `application-exercises` repository.
+
+1. Navigate to the `ae-06-brexit` folder in YOUR fork
+2. Open `ae-06-brexit.Rmd`
+3. Verify the `data` folder exists with `brexit.csv`
+4. Update the YAML with your name
+5. Knit to verify it works
+
+---
+
+## Packages
+```{r load-packages, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(scales)  # For formatting axis labels (we'll use this in Exercise 2)
+```
+
+**What these packages do:**
+- **tidyverse:** Data wrangling and visualization
+- **scales:** Formatting numbers, percentages, and dates on plots
+
+---
+
+## The Survey
+
+In September 2019, YouGov surveyed 1,639 GB adults with the following question:
+
+> In hindsight, do you think Britain was right/wrong to vote to leave EU?
+>
+> - Right to leave  
+> - Wrong to leave  
+> - Don't know
+
+The data from the survey is in `data/brexit.csv`.
+
+---
+
+## Load the Data
+```{r load-data, message=FALSE}
+brexit <- read_csv("data/brexit.csv")
+```
+
+**Explore the data:**
+```{r explore-brexit}
+glimpse(brexit)
+
+# See the first few rows
+head(brexit)
+
+# Count responses by region
+brexit %>%
+  count(region)
+
+# Count responses by opinion
+brexit %>%
+  count(opinion)
+```
+
+**Understanding the data:**
+
+- Each row represents one survey respondent
+- `region`: Which region of GB they're from
+- `opinion`: Their response (Wrong, Right, Don't know)
+
+---
+
+## Original Visualization
+
+In the course video, we made the following visualisation. First, we need to clean up the region names and put them in a logical order.
+```{r prepare-data}
+brexit <- brexit %>%
+  # Reorder regions from south to north
+  mutate(
+    region = fct_relevel(region, "london", "rest_of_south", 
+                         "midlands_wales", "north", "scot"),
+    # Rename regions with proper capitalization and spacing
+    region = fct_recode(region, 
+                        London = "london", 
+                        `Rest of South` = "rest_of_south", 
+                        `Midlands / Wales` = "midlands_wales", 
+                        North = "north", 
+                        Scotland = "scot")
+  )
+```
+
+**What this code does:**
+
+- `fct_relevel()`: Changes the order of factor levels
+- `fct_recode()`: Renames factor levels for better display
+- Backticks `` `Rest of South` ``: Used for names with spaces
+
+**Now create the original plot:**
+```{r original-plot, fig.width=10, fig.height=4}
+ggplot(brexit, aes(y = opinion, fill = opinion)) +
+  geom_bar() +
+  facet_wrap(~region, nrow = 1, labeller = label_wrap_gen(width = 12)) +
+  guides(fill = "none") +
+  labs(
+    title = "Was Britain right/wrong to vote to leave EU?",
+    subtitle = "YouGov Survey Results, 2-3 September 2019",
+    caption = "Source: bit.ly/2lCJZVg",
+    x = NULL, 
+    y = NULL
+  ) +
+  scale_fill_manual(values = c(
+    "Wrong" = "#ef8a62",
+    "Right" = "#67a9cf",
+    "Don't know" = "gray"
+  )) +
+  theme_minimal()
+```
+
+**What this plot shows:**
+
+- Counts (not proportions) of each opinion
+- Separated by region
+- All facets use the same x-axis scale
+
+---
+
+## Exercise 1: Free Scales
+
+Add `scales = "free_x"` as an argument to the `facet_wrap()` function. How does the visualisation change? How is the story this visualisation telling different than the story the original plot tells?
+```{r free-scales, eval=FALSE, fig.width=10, fig.height=4}
+# Remember to change eval=FALSE to eval=TRUE!
+
+ggplot(brexit, aes(y = opinion, fill = opinion)) +
+  geom_bar() +
+  facet_wrap(~region,
+    nrow = 1, 
+    labeller = label_wrap_gen(width = 12),
+    scales = ___  # Add "free_x" here
+  ) +
+  guides(fill = "none") +
+  labs(
+    title = "Was Britain right/wrong to vote to leave EU?",
+    subtitle = "YouGov Survey Results, 2-3 September 2019",
+    caption = "Source: bit.ly/2lCJZVg",
+    x = NULL, 
+    y = NULL
+  ) +
+  scale_fill_manual(values = c(
+    "Wrong" = "#ef8a62",
+    "Right" = "#67a9cf",
+    "Don't know" = "gray"
+  )) +
+  theme_minimal()
+```
+
+**What `scales = "free_x"` does:**
+
+- Each facet gets its own x-axis scale
+- The x-axis range is determined independently for each region
+- Makes it easier to see proportions within each region
+
+**Task 1.1:** How does the visualization change with free scales?
+
+**Your answer:**
+
+___________________________________________________________________________
+___________________________________________________________________________
+___________________________________________________________________________
+
+**Task 1.2:** How is the story this visualization tells different from the original plot?
+
+**Your answer:**
+
+**Original plot emphasizes:** ____________________________________________
+
+**Free scales plot emphasizes:** __________________________________________
+
+**Task 1.3:** Which visualization would be misleading if you wanted to compare the absolute number of responses across regions? Why?
+
+**Your answer:**
+
+___________________________________________________________________________
+___________________________________________________________________________
+
+---
+
+## Exercise 2: Comparing Proportions Across Facets
+
+First, calculate the proportion of wrong, right, and don't know answers in each category and then plot these proportions (rather than the counts). Then improve axis labeling.
+
+**How is the story this visualisation telling different than the story the original plot tells?**
+
+**Task 2.1:** Calculate proportions by region and opinion.
+```{r calculate-proportions, eval=FALSE}
+# Remember to change eval=FALSE to eval=TRUE!
+
+brexit_prop <- brexit %>%
+  count(___, ___) %>%           # Count by region and opinion
+  group_by(___) %>%             # Group by region
+  mutate(prop = n / sum(___))   # Calculate proportion within each region
+
+brexit_prop
+```
+
+**Hints:**
+
+- Use `count(region, opinion)`
+- Group by `region`
+- Calculate proportion: `n / sum(n)`
+
+**What this creates:**
+
+- A new dataset with proportions instead of counts
+- Each region's proportions sum to 1 (100%)
+
+**Task 2.2:** Plot the proportions with improved axis labeling.
+```{r plot-proportions, eval=FALSE, fig.width=10, fig.height=4}
+# Remember to change eval=FALSE to eval=TRUE!
+
+ggplot(brexit_prop, aes(y = opinion, x = ___, fill = opinion)) +
+  geom_col() +                  # Use geom_col() for already-calculated values
+  facet_wrap(~region, nrow = 1, labeller = label_wrap_gen(width = 12)) +
+  guides(fill = "none") +
+  labs(
+    title = "Was Britain right/wrong to vote to leave EU?",
+    subtitle = "YouGov Survey Results, 2-3 September 2019",
+    caption = "Source: bit.ly/2lCJZVg",
+    x = "___",                  # Label for proportions
+    y = NULL
+  ) +
+  scale_fill_manual(values = c(
+    "Wrong" = "#ef8a62",
+    "Right" = "#67a9cf",
+    "Don't know" = "gray"
+  )) +
+  scale_x_continuous(labels = ___) +  # Format x-axis as percentages
+  theme_minimal()
+```
+
+**Hints:**
+
+- x-axis should be `prop`
+- x-axis label: something like "Proportion" or "Percentage"
+- For percentage labels: `labels = percent_format()`
+- Use `geom_col()` not `geom_bar()` because we already calculated the values
+
+**Task 2.3:** How is the story this plot tells different from the original?
+
+**Your answer:**
+
+**Original plot (counts) shows:** _________________________________________
+
+**Proportion plot shows:** ________________________________________________
+
+**Which regions have the most "Wrong" responses as a proportion?** _______
+
+---
+
+## Exercise 3: Comparing Proportions Across Bars
+
+Recreate the same visualisation from the previous exercise, this time dodging the bars for opinion proportions for each region, rather than faceting by region. Then improve the legend.
+
+**How is the story this visualisation telling different than the story the previous plot tells?**
+
+**Task 3.1:** Create a dodged bar plot.
+```{r dodged-bars, eval=FALSE, fig.width=8, fig.height=5}
+# Remember to change eval=FALSE to eval=TRUE!
+
+ggplot(brexit_prop, aes(x = ___, y = ___, fill = ___)) +
+  geom_col(position = "___") +  # "dodge" makes bars side-by-side
+  labs(
+    title = "Was Britain right/wrong to vote to leave EU?",
+    subtitle = "YouGov Survey Results, 2-3 September 2019",
+    caption = "Source: bit.ly/2lCJZVg",
+    x = "___",                  # Region label
+    y = "___",                  # Proportion label
+    fill = "___"                # Better legend title
+  ) +
+  scale_fill_manual(values = c(
+    "Wrong" = "#ef8a62",
+    "Right" = "#67a9cf",
+    "Don't know" = "gray"
+  )) +
+  scale_y_continuous(labels = ___) +  # Format y-axis as percentages
+  theme_minimal()
+```
+
+**Hints:**
+
+- x-axis: `region`
+- y-axis: `prop`
+- fill: `opinion`
+- position: `"dodge"` (makes bars side-by-side)
+- x label: "Region"
+- y label: "Proportion"
+- fill label: "Opinion" or "Response"
+- y-axis labels: `percent_format()`
+
+**Task 3.2:** How is this visualization different from the faceted proportion plot?
+
+**Your answer:**
+
+**Faceted plot makes it easier to:** ______________________________________
+
+**Dodged plot makes it easier to:** _______________________________________
+
+**Task 3.3:** Which region shows the strongest opinion one way or the other (least "Don't know")?
+
+**Your answer:** _____
+
+---
+
+## Exercise 4: Reflection on Data Storytelling
+
+**Task 4.1:** You're writing a report arguing that Scotland is most opposed to Brexit. Which visualization would you use? Why?
+
+**Your answer:**
+
+I would use the _______________ plot because ______________________________
+___________________________________________________________________________
+___________________________________________________________________________
+
+**Task 4.2:** You're writing a report comparing absolute numbers of respondents across regions. Which visualization would be most appropriate? Why?
+
+**Your answer:**
+
+___________________________________________________________________________
+___________________________________________________________________________
+
+**Task 4.3:** What's one thing you learned about how visualization choices affect the story you tell?
+
+**Your answer:**
+
+___________________________________________________________________________
+___________________________________________________________________________
+___________________________________________________________________________
+
+---
+
+## Exercise 5: Challenge (Optional)
+
+**Task 5.1:** Create a stacked proportion bar chart where each bar represents a region and is divided by opinion, with each bar going from 0 to 100%.
+
+**Hint:** Use `position = "fill"` in `geom_col()`.
+```{r stacked-prop, eval=FALSE}
+# Your code here
+```
+
+**Task 5.2:** Create a visualization showing only the proportion who said "Wrong" across regions.
+```{r wrong-only, eval=FALSE}
+brexit_prop %>%
+  filter(opinion == "Wrong") %>%
+  # Your code here
+```
+
+---
+
+## Knit and Submit
+
+**Before you finish:**
+
+1. ✅ Make sure all code chunks run without errors
+2. ✅ Change `eval=FALSE` to `eval=TRUE` for all exercises
+3. ✅ Fill in all answer spaces
+4. ✅ Knit to HTML first to see all visualizations
+5. ✅ Review all plots - do they tell the story you described?
+
+**Git workflow:**
+
+1. Click the **Git** pane
+2. Check boxes next to all changed files
+3. Click **Commit**
+4. Write message: "Completed AE 06 - Brexit"
+5. Click **Commit** then **Push**
+
+---
+
+## Generate PDF for Canvas Submission
+
+1. Click **Knit** dropdown arrow
+2. Select **Knit to PDF**
+3. Find `brexit.pdf` in Files pane
+4. Export and save to your computer
+5. Submit to Canvas
+
+**Note:** The plots might look slightly different in PDF vs HTML due to formatting - this is normal.
+
+---
+
+## Troubleshooting
+
+**Common issues:**
+
+- **Error: "object 'brexit_prop' not found":** Make sure you ran Exercise 2 first to create this object
+- **Percentage formatting not working:** Make sure you loaded the `scales` package
+- **Bars not dodging:** Check that `position = "dodge"` is inside `geom_col()`
+- **Wrong proportions:** Make sure you grouped by `region` before calculating proportions
+
+**Factor issues:**
+- **Regions in wrong order:** The `fct_relevel()` code sets the order
+- **Region names look weird:** Check the `fct_recode()` code
+
+**Visualization issues:**
+- **Can't see all bars:** Adjust `fig.width` and `fig.height` in chunk options
+- **Legend overlapping plot:** Try `theme(legend.position = "bottom")`
+- **Facet labels wrapping oddly:** Adjust the `width` in `label_wrap_gen()`
+
+**Scales package:**
+- **`percent_format()` not working:** Make sure you loaded `library(scales)`
+- **Percentages showing decimals:** Use `percent_format(accuracy = 1)` for whole numbers
+
+**If you're stuck:**
+- Review the walkthrough video
+- Check ggplot2 documentation: `?facet_wrap`, `?geom_col`
+- Try each step individually to see where errors occur
+- Ask on the discussion board
+
+---
+
+## Key Concepts Review
+
+**Important visualization concepts from this exercise:**
+
+**Fixed vs. Free Scales:**
+- Fixed scales: Same axis range across all facets (easier to compare absolute values)
+- Free scales: Each facet has its own axis range (easier to see patterns within groups)
+
+**Counts vs. Proportions:**
+- Counts: Show absolute numbers (good for understanding sample sizes)
+- Proportions: Show percentages (good for comparing across groups of different sizes)
+
+**Faceting vs. Grouping:**
+- Faceting: Separate panels for each category (easier to see patterns within categories)
+- Grouping (dodged bars): All categories in one panel (easier to compare across categories)
+
+**Data storytelling:**
+- The same data can tell different stories depending on how you visualize it
+- Always consider what story your visualization is telling
+- Be aware of how your choices might mislead (intentionally or not)
+
+---
+
+## Quick Reference
+
+**Factor manipulation:**
+```r
+# Reorder levels
+fct_relevel(variable, "level1", "level2", ...)
+
+# Rename levels
+fct_recode(variable, 
+           "New Name 1" = "old_name_1",
+           "New Name 2" = "old_name_2")
+```
+
+**Calculate proportions:**
+```r
+data %>%
+  count(group_var, count_var) %>%
+  group_by(group_var) %>%
+  mutate(prop = n / sum(n))
+```
+
+**Faceting:**
+```r
+facet_wrap(~variable, scales = "free_x")  # Free x-axis
+facet_wrap(~variable, scales = "free_y")  # Free y-axis
+facet_wrap(~variable, scales = "free")    # Both axes free
+```
+
+**Bar positioning:**
+```r
+geom_col(position = "dodge")     # Side-by-side
+geom_col(position = "stack")     # Stacked (default)
+geom_col(position = "fill")      # Stacked to 100%
+```
+
+**Format as percentages:**
+```r
+scale_x_continuous(labels = percent_format())
+scale_y_continuous(labels = percent_format(accuracy = 1))  # Whole numbers
+```
